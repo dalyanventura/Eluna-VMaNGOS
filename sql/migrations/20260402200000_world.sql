@@ -176,9 +176,9 @@ VALUES
 
 -- Grant this proficiency spell to all new Rogue characters (all races).
 -- Race IDs: 1=Human, 2=Orc, 3=Dwarf, 4=NightElf, 5=Undead, 6=Tauren, 7=Gnome, 8=Troll,
---           10=BloodElf(not in vanilla), 11=Draenei(not in vanilla).
--- Vanilla Rogue races: Human(1), Orc(2), Dwarf(3), NightElf(4), Undead(5), Gnome(7), Troll(8).
--- Also HighElf(10) and Goblin(12) if present on this server.
+--           10=BloodElf (custom), 11=Draenei (custom), 12=Goblin (custom).
+-- Standard vanilla Rogue races: Human(1), Orc(2), Dwarf(3), NightElf(4),
+--   Undead(5), Gnome(7), Troll(8). Additional custom races included below.
 DELETE FROM `playercreateinfo_spell` WHERE `spell` = 60100 AND `class` = 4;
 INSERT INTO `playercreateinfo_spell` (`race`, `class`, `spell`, `note`) VALUES
     (1,  4, 60100, 'Rogue One-Handed Axes'),
@@ -188,7 +188,6 @@ INSERT INTO `playercreateinfo_spell` (`race`, `class`, `spell`, `note`) VALUES
     (5,  4, 60100, 'Rogue One-Handed Axes'),
     (7,  4, 60100, 'Rogue One-Handed Axes'),
     (8,  4, 60100, 'Rogue One-Handed Axes'),
-    (9,  4, 60100, 'Rogue One-Handed Axes'),
     (10, 4, 60100, 'Rogue One-Handed Axes'),
     (11, 4, 60100, 'Rogue One-Handed Axes'),
     (12, 4, 60100, 'Rogue One-Handed Axes');
@@ -338,6 +337,7 @@ VALUES
 -- 100 dmg total / 6 ticks = ~16 per tick; effectBasePoints = 15 (base) + 1 die
 -- school=0(physical), dispel=0(not dispellable as poison by conventional means),
 -- dmgClass=1(magic) kept 0 (physical) so it bypasses nature immunity
+-- auraInterruptFlags=0x20000 = AURA_INTERRUPT_FLAG_TAKE_DAMAGE (removed when target takes damage)
 (60103, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0,
  0, 0, 6, 0, 0,
@@ -379,6 +379,7 @@ VALUES
  1, 1, 1,
  0, 0, 0, 0),
 -- 60104: Corrosive Poison II DoT effect (128 dmg / 6 ticks ≈ 21 per tick; effectBasePoints=20, die=1)
+-- auraInterruptFlags=0x20000 = AURA_INTERRUPT_FLAG_TAKE_DAMAGE
 (60104, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0,
  0, 0, 6, 0, 0,
@@ -742,7 +743,10 @@ INSERT INTO `spell_template`
 VALUES
 -- 60140: Exploit Vulnerability active spell (weapon dmg + triggers debuff on target + 2 combo pts)
 -- effect1=17(weapon dmg noschool), effect2=64(trigger spell 60141), effect3=80(add combo points)
--- effectBasePoints1=34 (35% extra = 135% total), effectBasePoints3=1 (2 combo points via AddComboPoints=1 = +1 on top of base 1)
+-- effectBasePoints1=34: extra weapon damage percent (+35% → 135% total via WEAPON_DAMAGE_NOSCHOOL formula)
+-- effectBasePoints2=14: unused for TriggerSpell effect (value is ignored by the engine)
+-- effectBasePoints3=1: AddComboPoints adds (effectBasePoints+1) = 2 combo points
+-- dmgMultiplier1=1.35 is the actual multiplier used for SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL
 -- 3 min cooldown=180000 ms, 40 energy cost
 (60140, 0, 0, 0, 0, 0, 0,
  65536, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 180000, 180000, 0, 0, 0,

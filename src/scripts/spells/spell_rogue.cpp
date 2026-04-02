@@ -105,21 +105,28 @@ SpellScript* GetScript_RogueCorrosivePoison(SpellEntry const*)
 }
 
 // ============================================================
-// Taste for Blood talent IDs (stored in spell_template as aura SPELL_AURA_DUMMY).
-// Rupture (all ranks) casts the appropriate rank buff on the Rogue after a
-// successful application.  The duration of the buff is 6 s + 2 s per combo point
-// consumed (computed by examining the combo points BEFORE the finishing-move
-// consumes them, since Rupture is a finishing move).
+// Taste for Blood talent IDs.
+// The DB entries 60110–60112 serve as both the talent passive spell
+// (learned from the Assassination talent tree at ranks 1/2/3) and the
+// buff applied to the Rogue after Rupture lands.
 //
-// Talent ranks:
-//   Rank 1 => buff 60110 (+3% damage)
-//   Rank 2 => buff 60111 (+6% damage)
-//   Rank 3 => buff 60112 (+10% damage)
+// When a player invests in Taste for Blood:
+//   Rank 1 → learns spell 60110 (+3% damage)
+//   Rank 2 → learns spell 60111 (+6% damage)   [replaces rank 1]
+//   Rank 3 → learns spell 60112 (+10% damage)  [replaces rank 2]
+//
+// HasSpell() is correct here because the talent passive spells ARE the
+// buff spell IDs.  The talent tree DB entries must link to these IDs.
+//
+// After Rupture hits, the script:
+//   1. Reads the current combo points (still available before Spell::finish clears them).
+//   2. Casts the appropriate buff on the Rogue.
+//   3. Adjusts the aura duration to 6 s + 2 s per combo point.
 //
 // Rupture spell IDs: 1943, 8639, 8640, 11273, 11274, 26867
 // ============================================================
 
-// Buff spell IDs per Taste for Blood rank
+// Buff/talent spell IDs per Taste for Blood rank
 static const uint32 s_tasteForBloodBuffIds[3] = { 60110, 60111, 60112 };
 
 struct RogueRuptureScript : SpellScript
@@ -134,7 +141,7 @@ struct RogueRuptureScript : SpellScript
             return true;
 
         // Determine which Taste for Blood rank the player has (highest wins).
-        // Rank 3 buff overrides rank 2 which overrides rank 1.
+        // The player must have learned the talent passive spell from the talent tree.
         uint32 buffId = 0;
         for (int i = 2; i >= 0; --i)
         {
@@ -147,13 +154,23 @@ struct RogueRuptureScript : SpellScript
         if (!buffId)
             return true;
 
-        // combo points have already been consumed by the time OnEffectExecute fires,
-        // so we cannot read them here. Use the stored m_comboPoints that the spell
-        // recorded before consuming (accessible via Spell::GetSpellComboPoints if
-        // available, otherwise default to 5 for simplicity).
-        // Duration: 6 s + 2 s per combo point = 6000 + 2000 * points ms.
-        // We apply the buff with a 20 s max duration (5 CP) cast.
+        // Combo points are still available here: OnEffectExecute fires during effect
+        // processing, before Spell::finish() calls ClearComboPoints().
+        uint32 comboPoints = pPlayer->GetComboPoints();
+        if (comboPoints == 0)
+            comboPoints = 1; // safety floor
+
+        // Duration: 6 s base + 2 s per combo point spent.
+        int32 durationMs = 6000 + int32(comboPoints) * 2000;
+
         pPlayer->CastSpell(pPlayer, buffId, true);
+
+        // Adjust the freshly-applied aura to the correct duration.
+        if (SpellAuraHolder* holder = pPlayer->GetSpellAuraHolder(buffId))
+        {
+            holder->SetAuraDuration(durationMs);
+            holder->UpdateAuraDuration();
+        }
         return true;
     }
 };
