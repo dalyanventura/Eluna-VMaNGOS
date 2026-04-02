@@ -449,9 +449,10 @@ void WorldSession::HandleSetSelectionOpcode(WorldPacket& recv_data)
             if (!factionTemplateEntry->IsHostileToPlayerTeam(*_player->GetFactionTemplateEntry()))
                 _player->GetReputationMgr().SetVisible(factionTemplateEntry);
 
-    // Drop combo points only for rogues and druids
-    // Warriors use combo points internally, do no reset for everyone
-    if ((_player->GetClass() == CLASS_ROGUE || _player->GetClass() == CLASS_DRUID) && unit && guid != _player->GetComboTargetGuid())
+    // Turtle WoW: Combo points no longer vanish on target switch.
+    // They reset only when the player applies combo points to a different target
+    // (handled inside Player::AddComboPoints). We still clear on deselect (null target).
+    if ((_player->GetClass() == CLASS_ROGUE || _player->GetClass() == CLASS_DRUID) && !unit)
         _player->ClearComboPoints();
 
     // Update autoshot if need

@@ -2227,6 +2227,45 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool ext
 
     ProcDamageAndSpell(ProcSystemArguments(damageInfo.target, damageInfo.procAttacker, damageInfo.procVictim, damageInfo.procEx, damageInfo.totalDamage, damageInfo.totalDamage + damageInfo.totalAbsorb + damageInfo.totalResist, damageInfo.attackType));
 
+    // Honor Among Thieves (Subtlety talent 60120/60121):
+    // Physical critical hits by a party member grant Energy to nearby Rogues with the talent.
+    if ((damageInfo.procEx & PROC_EX_CRITICAL_HIT) && damageInfo.totalDamage > 0 &&
+        damageInfo.attackType != RANGED_ATTACK)
+    {
+        if (Player* pAttacker = ToPlayer())
+        {
+            if (Group* pGroup = pAttacker->GetGroup())
+            {
+                static const uint32 HAT_SPELL_IDS[2] = { 60120, 60121 };
+                static const int32  HAT_ENERGY[2]    = { 2, 5 };
+
+                for (GroupReference* itr = pGroup->GetFirstMember(); itr; itr = itr->next())
+                {
+                    Player* pMember = itr->getSource();
+                    if (!pMember || pMember == pAttacker || !pMember->IsAlive())
+                        continue;
+                    if (pMember->GetClass() != CLASS_ROGUE)
+                        continue;
+                    if (!pMember->IsWithinDistInMap(pAttacker, 20.0f))
+                        continue;
+
+                    // Grant energy for the highest HAT rank present, respecting the 2s ICD.
+                    for (int i = 1; i >= 0; --i)
+                    {
+                        if (!pMember->HasAura(HAT_SPELL_IDS[i]))
+                            continue;
+                        SpellEntry const* hatEntry = sSpellMgr.GetSpellEntry(HAT_SPELL_IDS[i]);
+                        if (!hatEntry || !pMember->IsSpellReady(*hatEntry))
+                            break;
+                        pMember->ModifyPower(POWER_ENERGY, HAT_ENERGY[i]);
+                        pMember->AddCooldown(*hatEntry, nullptr, false, 2000);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // Damage is done after procs so it can trigger auras on the victim that affect the caster in case of killing blow.
     DealMeleeDamage(&damageInfo, true);
 
@@ -5623,7 +5662,16 @@ float Unit::SpellHealingBonusTaken(SpellCaster const* pCaster, SpellEntry const*
     float takenTotalMod = 1.0f;
 
     // Healing taken percent
-    float minval = float(GetMaxNegativeAuraModifier(SPELL_AURA_MOD_HEALING_PCT));
+    // Sum all negative modifiers so stacking effects (e.g. Wound Poison) are applied correctly.
+    // Positive modifiers are still capped to the single highest (retail-accurate).
+    int32 negHealPct = 0;
+    {
+        AuraList const& healPctAuras = GetAurasByType(SPELL_AURA_MOD_HEALING_PCT);
+        for (const auto& i : healPctAuras)
+            if (i->GetModifier()->m_amount < 0)
+                negHealPct += i->GetModifier()->m_amount;
+    }
+    float minval = float(negHealPct);
     if (minval)
         takenTotalMod *= (100.0f + minval) / 100.0f;
 
